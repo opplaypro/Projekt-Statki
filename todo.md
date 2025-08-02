@@ -3,8 +3,8 @@
 ## MOVING TO 2P INSTEAD OF 4P!!!!!
 ## Logic
 > ### Game logic:
->> - [ ] Joining game
->> - [ ] Creating game
+>> - [x] Joining game
+>> - [x] Creating game
 >> - [ ] everything else
 ## Game engine
 
@@ -14,20 +14,16 @@
 >>   - [ ] data of cell (on hover)
 >>   - [ ] attack button
 >>   - [ ] combat log
->> - [.] Main menu
->> - [.] Connecting window
->>   - [.] join game
->>   - [.] create game
->> - [.] pause screen
+>> - [x] Main menu
+>> - [x] Connecting window
+>>   - [x] join game
+>>   - [x] create game
+>> - [x] pause screen
 >> - [-] settings
 >> - [-] stats
 >> - [-] player profile (if added)
 
 > ### Graphics:
->> - [ ] ships (all sizes)
->> - [ ] empty cells
->> - [ ] menu items
-
-> ### ttt
->> - ttt
->> - ttt
+>> - [-] ships (all sizes)
+>> - [-] empty cells
+>> - [-] menu items

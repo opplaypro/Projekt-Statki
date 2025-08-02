@@ -1,12 +1,16 @@
-import gamedata as gd
-import draw_engine as de
 import socket
 import struct
 import pickle
 import base64
 import threading
 import time
-xd = ["test1", "test2", "test3"]
+import queue
+import logging
+
+logger = logging.getLogger(__name__)
+
+queues = {'received': queue.Queue()}
+connection_socket = None
 threads = [threading.Thread() for _ in range(2)]  # list to hold threads
 # encode_ip function for full IP
 
@@ -44,40 +48,59 @@ def create_lobby_server():
 
 
 def listen_for_connections(s: socket.socket):
+    global connection_socket
     with s:
         s.listen()
         con, addr = s.accept()
+        connection_socket = con
         with con:
             while True:
                 try:
-                    data = con.recv(1024)
+                    data = con.recv(4096)
                     if not data:
                         break
-                    print(f"Received from {addr}: {pickle.loads(data)}")
-                    con.sendall(pickle.dumps(xd))
-
-                except (ConnectionResetError, EOFError):
-                    print(f"Connection with {addr} closed.")
+                    queues['received'].put(pickle.loads(data))
+                except (ConnectionResetError, EOFError, ConnectionAbortedError):
+                    logger.error(f"Connection with {addr} closed.")
                     break
+
 
 # client side function to join a game lobby
 def join_lobby_player(address: tuple[str, int]):
     global threads
+
     def connect_thread():
+        global connection_socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
                 s.connect(address)
+                connection_socket = s
                 print(f"Connected to lobby at {address}")
-                s.sendall(pickle.dumps(xd))  # send some data
-                data = s.recv(1024)
-                print(f"Received from server: {pickle.loads(data)}")
+                while True:
+                    try:
+                        data = s.recv(4096)
+                        if not data:
+                            break
+                        queues['received'].put(pickle.loads(data))
+                    except (ConnectionResetError, EOFError, ConnectionAbortedError):
+                        logger.error(f"Connection with server closed.")
+                        break
             except ConnectionRefusedError:
                 print(f"Could not connect to server at {address}. Is the server running?")
             except Exception as e:
                 print(f"An error occurred: {e}")
+
     threads[1] = threading.Thread(target=connect_thread, daemon=True)
     threads[1].start()
 
+
+def send_data(data):
+    global connection_socket
+    if connection_socket:
+        try:
+            connection_socket.sendall(pickle.dumps(data))
+        except (ConnectionResetError, BrokenPipeError):
+            logger.error("Failed to send data. Connection lost.")
 
 
 if __name__ == "__main__":
