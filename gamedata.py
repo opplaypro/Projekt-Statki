@@ -2,7 +2,6 @@
 # The game is intended to be played by four players
 
 import logging
-
 logging.basicConfig(filename='latest.log', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
