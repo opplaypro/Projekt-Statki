@@ -291,10 +291,13 @@ class CreateBoardView(arcade.View):
         self.wr = height / 1080  # window ratio
 
         # Add a confirm button
-        self.confirm_button = arcade.gui.UIFlatButton(text="Confirm", width=250 * self.wr, disabled=True)
+        self.confirm_button = arcade.gui.UIFlatButton(text="Confirm", width=250 * self.wr)
+        self.confirm_button.disabled = True
 
         @self.confirm_button.event("on_click")
         def on_click_confirm(event):
+            if self.confirm_button.disabled:
+                return
             # Pass the board state to the game view
             game_view = GameView(self, self.board_state)
             self.window.show_view(game_view)

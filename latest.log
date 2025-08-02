@@ -43,3 +43,10 @@ ERROR:__main__:[19:16:13] Traceback (most recent call last):
     ^^^^^^^^^^^^^^^^^^^^^^^
 AttributeError: 'Thread' object has no attribute 'terminate'
 
+ERROR:__main__:[20:10:34] Error terminating connection: 'Thread' object has no attribute 'terminate'
+ERROR:__main__:[20:10:34] Traceback (most recent call last):
+  File "C:\Users\wojte\Desktop\politechnika\S2\TI\Projekt Statki\gui_windows.py", line 232, in on_click_back
+    mg.threads[1].terminate()
+    ^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Thread' object has no attribute 'terminate'
+
