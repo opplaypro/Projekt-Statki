@@ -98,6 +98,7 @@ def send_data(data):
     global connection_socket
     if connection_socket:
         try:
+            # noinspection PyUnresolvedReferences
             connection_socket.sendall(pickle.dumps(data))
         except (ConnectionResetError, BrokenPipeError):
             logger.error("Failed to send data. Connection lost.")

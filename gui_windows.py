@@ -1,16 +1,29 @@
-import traceback
 import arcade
 import arcade.gui
 import logging
+import sys
+import traceback
 from datetime import datetime
 import maingame as mg
 import pyperclip as pc
+import arcade.gl.backends.opengl.provider
+import arcade.gl.backends.opengl
+import arcade.gl.backends
 
 is_player = -1  # global variable to check if player or server, -1 undefined, 0 server, 1 player
 
-logging.basicConfig(filename='latest.log', level=logging.DEBUG, filemode='w')
-logger = logging.getLogger(__name__)
+logging.basicConfig(filename='latest.log', level=0, filemode='w',
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
+logger = logging.getLogger(__name__)
+def log_uncaught_exceptions(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        # Pozwól na normalne przerwanie programu przez Ctrl+C
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logging.error("Unhandled exception!", exc_info=(exc_type, exc_value, exc_traceback))
+
+sys.excepthook = log_uncaught_exceptions
 
 
 # Main menu of the game
@@ -25,6 +38,8 @@ class MainMenuView(arcade.View):
 
         # create buttons with relative size
         switch_menu_button = arcade.gui.UIFlatButton(text="Start", width=250*wr)
+        how_to_play_button = arcade.gui.UIFlatButton(text="How to Play", width=250*wr)
+        exit_button = arcade.gui.UIFlatButton(text="Exit", width=250*wr)
 
         @switch_menu_button.event("on_click")
         def on_click_switch_button(event):
@@ -32,12 +47,33 @@ class MainMenuView(arcade.View):
             connect_menu_view = ConnectMenuView(self)
             self.window.show_view(connect_menu_view)
 
+        @how_to_play_button.event("on_click")
+        def on_click_how_to_play(event):
+            how_to_play_view = HowToPlayView(self)
+            self.window.show_view(how_to_play_view)
+
+        @exit_button.event("on_click")
+        def on_click_exit(event):
+            arcade.exit()
+
         self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
 
         self.anchor.add(
             anchor_x="center_x",
             anchor_y="center_y",
             child=switch_menu_button,
+            align_y=100 * wr,
+        )
+        self.anchor.add(
+            anchor_x="center_x",
+            anchor_y="center_y",
+            child=how_to_play_button,
+        )
+        self.anchor.add(
+            anchor_x="center_x",
+            anchor_y="center_y",
+            child=exit_button,
+            align_y=-100 * wr,
         )
 
     def on_draw(self):
@@ -50,6 +86,63 @@ class MainMenuView(arcade.View):
     def on_show_view(self):
         arcade.set_background_color(arcade.color.CITRON)
 
+        self.manager.enable()
+
+
+class HowToPlayView(arcade.View):
+    def __init__(self, previous_view: arcade.View):
+        super().__init__()
+        self.manager = arcade.gui.UIManager()
+        self.background_color = arcade.color.BLEU_DE_FRANCE
+        self.previous_view = previous_view
+
+        width, height = self.size
+        wr = height / 1080  # window ratio
+
+        instructions = (
+            "How to Play:\n\n"
+            "1. Create or Join a lobby. The host shares the code with the client.\n\n"
+            "2. Place your ships on the board.\n"
+            "   - Click a ship from the list on the right to select it.\n"
+            "   - Press 'R' to rotate the selected ship.\n"
+            "   - Click on the grid to place the ship.\n"
+            "   - Ships cannot touch each other.\n"
+            "   - Once all 10 ships are placed, click 'Confirm'.\n\n"
+            "3. The game starts when both players are ready.\n\n"
+            "4. Take turns shooting at the opponent's grid.\n"
+            "   - A red cell is a hit.\n"
+            "   - A white cell is a miss.\n"
+            "   - A dark red cell means a ship has been sunk.\n"
+            "   - If you hit a ship, you get another turn.\n\n"
+            "5. The first player to sink all of the opponent's ships wins!"
+        )
+
+        instructions_area = arcade.gui.UITextArea(
+            text=instructions,
+            width=width * 0.8,
+            height=height * 0.7,
+            font_size=20 * wr,
+            text_color=arcade.color.WHITE
+        )
+        back_button = arcade.gui.UIFlatButton(text="Back", width=250 * wr)
+
+        @back_button.event("on_click")
+        def on_click_back(event):
+            self.window.show_view(self.previous_view)
+
+        self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
+        self.anchor.add(child=instructions_area, anchor_x="center_x", anchor_y="center_y", align_y=50 * wr)
+        self.anchor.add(child=back_button, anchor_x="center_x", anchor_y="bottom", align_y=50 * wr)
+
+    def on_draw(self):
+        self.clear()
+        self.manager.draw()
+
+    def on_hide_view(self):
+        self.manager.disable()
+
+    def on_show_view(self):
+        arcade.set_background_color(arcade.color.BLEU_DE_FRANCE)
         self.manager.enable()
 
 
@@ -221,25 +314,31 @@ class CreateMenuView(arcade.View):
         super().__init__()
         self.manager = arcade.gui.UIManager()
         self.background_color = arcade.color.LAVENDER
+        self.client_connected = False
 
         width, height = self.size
         wr = height / 1080  # window ratio
 
         # create buttons with relative size
-        lobby_code = arcade.gui.UIFlatButton(text=lobby_code, width=250*wr,
+        lobby_code_button = arcade.gui.UIFlatButton(text=lobby_code, width=250*wr,
                                              text_color=arcade.color.BLACK)
-        create_button = arcade.gui.UIFlatButton(text="Create", width=250*wr)
+        self.create_button = arcade.gui.UIFlatButton(text="Create", width=250*wr)
+        self.create_button.disabled = True
         back_button = arcade.gui.UIFlatButton(text="Back", width=250*wr)
+        self.status_label = arcade.gui.UITextArea(text="Waiting for player to connect...",
+                                                  width=400 * wr, text_color=arcade.color.BLACK)
         # field showing code for players to connect
         # TODO
         # field with connected players
 
-        @lobby_code.event("on_click")
+        @lobby_code_button.event("on_click")
         def on_click_lobby_code(event):
             pc.copy(self.lobby_code)
 
-        @create_button.event("on_click")
+        @self.create_button.event("on_click")
         def on_click_create(event):
+            if self.create_button.disabled:
+                return
             global is_player
             is_player = 0
             create_board_view = CreateBoardView(self)
@@ -260,14 +359,19 @@ class CreateMenuView(arcade.View):
         self.anchor.add(
             anchor_x="center_x",
             anchor_y="center_y",
-            child=lobby_code,
-            align_y=100 * wr,
+            child=self.status_label,
+            align_y=200 * wr,
         )
-
         self.anchor.add(
             anchor_x="center_x",
             anchor_y="center_y",
-            child=create_button,
+            child=lobby_code_button,
+            align_y=100 * wr,
+        )
+        self.anchor.add(
+            anchor_x="center_x",
+            anchor_y="center_y",
+            child=self.create_button,
         )
         self.anchor.add(
             anchor_x="center_x",
@@ -275,6 +379,12 @@ class CreateMenuView(arcade.View):
             child=back_button,
             align_y=-100 * wr,
         )
+
+    def on_update(self, delta_time: float):
+        if not self.client_connected and mg.connection_socket is not None:
+            self.client_connected = True
+            self.create_button.disabled = False
+            self.status_label.text = "Player connected! You can start."
 
     def on_draw(self):
         self.clear()
@@ -319,8 +429,18 @@ class CreateBoardView(arcade.View):
                 return
             # send ready signal
             mg.send_data({'status': 'ready'})
-            # Pass the board state to the game view
-            game_view = GameView(self, self.board_state)
+
+            # Create a map of ships with their coordinates
+            ship_map = []
+            for ship_info in self.placed_ships:
+                ship_coords = []
+                for spr in ship_info['sprites']:
+                    r, c = self._get_sprite_indices(spr)
+                    ship_coords.append((r, c))
+                ship_map.append(ship_coords)
+
+            # Pass the board state and ship map to the game view
+            game_view = GameView(self, self.board_state, ship_map)
             self.window.show_view(game_view)
 
         self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
@@ -546,16 +666,19 @@ class CreateBoardView(arcade.View):
 
 # Menu when player is in the game
 class GameView(arcade.View):
-    def __init__(self, previous_view: arcade.View, player_board_state: list[list[int]] = None):
+    def __init__(self, previous_view: arcade.View, player_board_state: list[list[int]] = None, ship_map: list = None):
         super().__init__()
         self.manager = arcade.gui.UIManager()
         self.background_color = arcade.color.SEA_BLUE
         self.grid_sprite_list = arcade.SpriteList()
         self.grid_sprites = []
         self.player_board_state = player_board_state
+        self.ship_map = ship_map
+        self.my_hits_board = [[False for _ in range(10)] for _ in range(10)]
         self.game_started = False
         self.remote_player_ready = False
         self.waiting_for_shot_result = False
+        self.my_hits = 0
 
         # get ratio correct
         width, height = self.size
@@ -589,6 +712,7 @@ class GameView(arcade.View):
                     y = height - (156 * self.wr + row * (w + m) + (w / 2))
                     # noinspection PyTypeChecker
                     color = arcade.color.DARK_GRAY
+                    # noinspection PyTypeChecker
                     sprite = arcade.SpriteSolidColor(w, w, color=color)
                     sprite.center_x = x
                     sprite.center_y = y
@@ -677,13 +801,29 @@ class GameView(arcade.View):
                     # This move is on our board (the left one)
                     is_hit = self.player_board_state[row][col] == 1
                     result = 'hit' if is_hit else 'miss'
+                    sunk_ship_coords = None
+
+                    if is_hit:
+                        self.my_hits_board[row][col] = True
+                        # Check if a ship is sunk
+                        for ship in self.ship_map:
+                            if (row, col) in ship:
+                                is_sunk = all(self.my_hits_board[r][c] for r, c in ship)
+                                if is_sunk:
+                                    result = 'sunk'
+                                    sunk_ship_coords = ship
+                                break
 
                     # Send result back to the opponent
-                    mg.send_data({'shot_result': result, 'coords': (row, col)})
+                    mg.send_data({'shot_result': result, 'coords': sunk_ship_coords if sunk_ship_coords else (row, col)})
 
                     # Update our own board visually
-                    color = arcade.color.RED if is_hit else arcade.color.WHITE
-                    self.grid_sprites[0][row][col].color = color
+                    if result == 'sunk':
+                        for r, c in sunk_ship_coords:
+                            self.grid_sprites[0][r][c].color = arcade.color.DARK_RED
+                    else:
+                        color = arcade.color.RED if is_hit else arcade.color.WHITE
+                        self.grid_sprites[0][row][col].color = color
 
                     if result == 'miss':
                         self.is_my_turn = True
@@ -696,19 +836,39 @@ class GameView(arcade.View):
                 elif self.game_started and 'shot_result' in data:
                     self.waiting_for_shot_result = False
                     result = data['shot_result']
-                    row, col = data['coords']
-                    color = arcade.color.RED if result == 'hit' else arcade.color.WHITE
-                    # Update the opponent's grid (the right one)
-                    index = 100 + row * 10 + col
-                    self.grid_sprite_list[index].color = color
+                    coords = data['coords']
+
+                    if result == 'sunk':
+                        for r, c in coords:
+                            index = 100 + r * 10 + c
+                            self.grid_sprite_list[index].color = arcade.color.DARK_RED
+                    else:
+                        row, col = coords
+                        color = arcade.color.RED if result == 'hit' else arcade.color.WHITE
+                        # Update the opponent's grid (the right one)
+                        index = 100 + row * 10 + col
+                        self.grid_sprite_list[index].color = color
+
+                    if result == 'hit' or result == 'sunk':
+                        self.my_hits += 1
+                        if self.my_hits == 20:
+                            mg.send_data({'game_over': 'I won'})
+                            game_over_view = GameOverView(self, "You won!")
+                            self.window.show_view(game_over_view)
+                            return
 
                     if result == 'miss':
                         self.is_my_turn = False
                         self.turn_label.text = "Opponent's turn"
-                    else:  # hit
+                    else:  # hit or sunk
                         self.is_my_turn = True
                         self.turn_label.text = "Your turn"
                     self.turn_label.fit_content()
+
+                elif self.game_started and 'game_over' in data:
+                    game_over_view = GameOverView(self, "You lost!")
+                    self.window.show_view(game_over_view)
+                    return
 
         except Exception as e:
             logger.error(f"[{datetime.now():%H:%M:%S}] Error processing queue: {e}")
@@ -723,6 +883,51 @@ class GameView(arcade.View):
 
     def on_hide(self):
         self.manager.disable()
+
+
+class GameOverView(arcade.View):
+    def __init__(self, previous_view: arcade.View, message: str):
+        super().__init__()
+        self.manager = arcade.gui.UIManager()
+        self.background_color = arcade.color.BLACK_BEAN
+        self.message = message
+
+        width, height = self.size
+        wr = height / 1080  # window ratio
+
+        # create text and a button to go back to main menu
+        message_label = arcade.gui.UILabel(text=self.message, font_size=50 * wr, text_color=arcade.color.WHITE_SMOKE)
+        menu_button = arcade.gui.UIFlatButton(text="Back to Menu", width=250 * wr)
+
+        @menu_button.event("on_click")
+        def on_click_menu_button(event):
+            main_menu_view = MainMenuView()
+            self.window.show_view(main_menu_view)
+
+        self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
+
+        self.anchor.add(
+            anchor_x="center_x",
+            anchor_y="center_y",
+            child=message_label,
+            align_y=100 * wr,
+        )
+        self.anchor.add(
+            anchor_x="center_x",
+            anchor_y="center_y",
+            child=menu_button,
+        )
+
+    def on_draw(self):
+        self.clear()
+        self.manager.draw()
+
+    def on_hide_view(self):
+        self.manager.disable()
+
+    def on_show_view(self):
+        arcade.set_background_color(arcade.color.BLACK_BEAN)
+        self.manager.enable()
 
 
 ''' # old code, 4P version, moving to 2P
