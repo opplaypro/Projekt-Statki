@@ -122,7 +122,7 @@ class HowToPlayView(arcade.View):
             width=width * 0.8,
             height=height * 0.7,
             font_size=20 * wr,
-            text_color=arcade.color.WHITE
+            text_color=arcade.color.BLACK
         )
         back_button = arcade.gui.UIFlatButton(text="Back", width=250 * wr)
 
