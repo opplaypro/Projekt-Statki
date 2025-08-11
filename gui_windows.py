@@ -113,7 +113,8 @@ class HowToPlayView(arcade.View):
             "   - A red cell is a hit.\n"
             "   - A white cell is a miss.\n"
             "   - A dark red cell means a ship has been sunk.\n"
-            "   - If you hit a ship, you get another turn.\n\n"
+            "   - If you hit a ship, you get another turn.\n"
+            "   - Right click an empty cell to mark it, you can't shoot it.\n\n"
             "5. The first player to sink all of the opponent's ships wins!"
         )
 
