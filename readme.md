@@ -4,7 +4,7 @@
 
 how to build yourself:
 1. clone repo
-2. 2. run in powershell (windows):
+2. run in powershell (windows):
 ```bash
 cd battleships
 pip install -r requirements.txt
