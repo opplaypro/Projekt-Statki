@@ -15,7 +15,7 @@ is_player = -1
 # global variable to check if player or server:
 # -1 undefined, 0 server, 1 player
 
-logfile = f"latest_{random.randint(10000,99999)}.log"
+logfile = f"logs/latest_{random.randint(10000,99999)}.log"
 logging.basicConfig(filename=logfile, level=0, filemode='w',
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
