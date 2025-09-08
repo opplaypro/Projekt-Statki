@@ -2,26 +2,35 @@ import arcade
 import arcade.gui
 import logging
 import sys
-import traceback
+import os
 from datetime import datetime
+import random
 import maingame as mg
 import pyperclip as pc
 import arcade.gl.backends.opengl.provider
 import arcade.gl.backends.opengl
 import arcade.gl.backends
 
-is_player = -1  # global variable to check if player or server, -1 undefined, 0 server, 1 player
+is_player = -1
+# global variable to check if player or server:
+# -1 undefined, 0 server, 1 player
 
-logging.basicConfig(filename='latest.log', level=0, filemode='w',
+logfile = f"latest_{random.randint(10000,99999)}.log"
+logging.basicConfig(filename=logfile, level=0, filemode='w',
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 logger = logging.getLogger(__name__)
+
+
+
 def log_uncaught_exceptions(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
         # Pozwól na normalne przerwanie programu przez Ctrl+C
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
-    logging.error("Unhandled exception!", exc_info=(exc_type, exc_value, exc_traceback))
+    logging.error("Unhandled exception!",
+                  exc_info=(exc_type, exc_value, exc_traceback))
+
 
 sys.excepthook = log_uncaught_exceptions
 
@@ -37,9 +46,12 @@ class MainMenuView(arcade.View):
         wr = height / 1080  # window ratio
 
         # create buttons with relative size
-        switch_menu_button = arcade.gui.UIFlatButton(text="Start", width=250*wr)
-        how_to_play_button = arcade.gui.UIFlatButton(text="How to Play", width=250*wr)
-        exit_button = arcade.gui.UIFlatButton(text="Exit", width=250*wr)
+        switch_menu_button = arcade.gui.UIFlatButton(
+            text="Start", width=250*wr)
+        how_to_play_button = arcade.gui.UIFlatButton(
+            text="How to Play", width=250*wr)
+        exit_button = arcade.gui.UIFlatButton(
+            text="Exit", width=250*wr)
 
         @switch_menu_button.event("on_click")
         def on_click_switch_button(event):
@@ -101,7 +113,8 @@ class HowToPlayView(arcade.View):
 
         instructions = (
             "How to Play:\n\n"
-            "1. Create or Join a lobby. The host shares the code with the client.\n\n"
+            "1. Create or Join a lobby.\n"
+            "The host shares the code with the client.\n\n"
             "2. Place your ships on the board.\n"
             "   - Click a ship from the list on the right to select it.\n"
             "   - Press 'R' to rotate the selected ship.\n"
@@ -114,7 +127,7 @@ class HowToPlayView(arcade.View):
             "   - A white cell is a miss.\n"
             "   - A dark red cell means a ship has been sunk.\n"
             "   - If you hit a ship, you get another turn.\n"
-            "   - Right click an empty cell to mark it, you can't shoot it.\n\n"
+            "   - Right click an empty cell to mark it, you can't shoot it.\n"
             "5. The first player to sink all of the opponent's ships wins!"
         )
 
@@ -132,8 +145,10 @@ class HowToPlayView(arcade.View):
             self.window.show_view(self.previous_view)
 
         self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
-        self.anchor.add(child=instructions_area, anchor_x="center_x", anchor_y="center_y", align_y=50 * wr)
-        self.anchor.add(child=back_button, anchor_x="center_x", anchor_y="bottom", align_y=50 * wr)
+        self.anchor.add(child=instructions_area, anchor_x="center_x",
+                        anchor_y="center_y", align_y=50 * wr)
+        self.anchor.add(child=back_button, anchor_x="center_x",
+                        anchor_y="bottom", align_y=50 * wr)
 
     def on_draw(self):
         self.clear()
@@ -153,7 +168,6 @@ class ConnectMenuView(arcade.View):
         super().__init__()
         self.manager = arcade.gui.UIManager()
         self.background_color = arcade.color.MAHOGANY
-
         width, height = self.size
         wr = height / 1080  # window ratio
 
@@ -169,15 +183,14 @@ class ConnectMenuView(arcade.View):
 
         @create_button.event("on_click")
         def on_click_exit(event):
-            code = mg.create_lobby_server()
-            create_menu_view = CreateMenuView(self, code)
-            self.window.show_view(create_menu_view)
+            # Open mode selection for 2P/4P
+            select_mode_view = CreateModeView(self)
+            self.window.show_view(select_mode_view)
 
         @back_button.event("on_click")
         def on_click_back(event):
             if previous_view:
                 self.window.show_view(previous_view)
-
 
         self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
 
@@ -213,6 +226,72 @@ class ConnectMenuView(arcade.View):
         self.manager.enable()
 
 
+class CreateModeView(arcade.View):
+    def __init__(self, previous_view: arcade.View):
+        super().__init__()
+        self.manager = arcade.gui.UIManager()
+        self.background_color = arcade.color.ARMY_GREEN
+        self.previous_view = previous_view
+
+        width, height = self.size
+        wr = height / 1080
+
+        title = arcade.gui.UILabel(text="Choose game mode", font_size=28*wr,
+                                   text_color=arcade.color.WHITE)
+        two_p_btn = arcade.gui.UIFlatButton(text="Create 2P", width=250*wr)
+        four_p_btn = arcade.gui.UIFlatButton(text="Create 4P", width=250*wr)
+        back_button = arcade.gui.UIFlatButton(text="Back", width=250*wr)
+
+        @two_p_btn.event("on_click")
+        def on_click_2p(event):
+            code = mg.create_lobby_server(players=2)
+            create_menu_view = CreateMenuView(self, code)
+            self.window.show_view(create_menu_view)
+
+        @four_p_btn.event("on_click")
+        def on_click_4p(event):
+            code = mg.create_lobby_server(players=4)
+            create_menu_view = CreateMenuView(self, code)
+            self.window.show_view(create_menu_view)
+
+        @back_button.event("on_click")
+        def on_click_back(event):
+            if self.previous_view:
+                self.window.show_view(self.previous_view)
+
+        self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
+        self.anchor.add(
+            child=title,
+            anchor_x="center_x",
+            anchor_y="center_y",
+            align_y=200*wr)
+        self.anchor.add(
+            child=two_p_btn,
+            anchor_x="center_x",
+            anchor_y="center_y",
+            align_y=100*wr)
+        self.anchor.add(
+            child=four_p_btn,
+            anchor_x="center_x",
+            anchor_y="center_y")
+        self.anchor.add(
+            child=back_button,
+            anchor_x="center_x",
+            anchor_y="center_y",
+            align_y=-100*wr)
+
+    def on_draw(self):
+        self.clear()
+        self.manager.draw()
+
+    def on_hide_view(self):
+        self.manager.disable()
+
+    def on_show_view(self):
+        arcade.set_background_color(arcade.color.ARMY_GREEN)
+        self.manager.enable()
+
+
 class JoinMenuView(arcade.View):
     def __init__(self, previous_view: arcade.View):
         super().__init__()
@@ -225,12 +304,13 @@ class JoinMenuView(arcade.View):
         wr = height / 1080  # window ratio
 
         # create input field and a button to join the game
-        self.enter_code_text = arcade.gui.UITextArea(text="Enter game code below", width=250*wr,
-                                                     text_color=arcade.color.BLACK)
-        self.enter_code_field = arcade.gui.UIInputText(width=250*wr, text_color=arcade.color.BLACK)
+        self.enter_code_text = arcade.gui.UITextArea(
+            text="Enter game code below", width=250*wr,
+            text_color=arcade.color.BLACK)
+        self.enter_code_field = arcade.gui.UIInputText(
+            width=250*wr, text_color=arcade.color.BLACK)
         join_button = arcade.gui.UIFlatButton(text="Join", width=250*wr)
         back_button = arcade.gui.UIFlatButton(text="Back", width=250*wr)
-
 
         @self.enter_code_field.event("on_focus")
         def on_focus_input(event):
@@ -241,7 +321,7 @@ class JoinMenuView(arcade.View):
             self.is_input_focused = False
 
         @join_button.event("on_click")
-        def on_click_back(event):
+        def on_click_join(event):
             try:
                 global is_player
                 is_player = 1
@@ -256,10 +336,6 @@ class JoinMenuView(arcade.View):
 
         @back_button.event("on_click")
         def on_click_back(event):
-            try:
-                mg.threads[0].terminate()
-            except Exception as e:
-                logger.error(f"[{datetime.now():%H:%M:%S}] Error terminating connection: {e}")
             if previous_view:
                 self.window.show_view(previous_view)
 
@@ -316,21 +392,22 @@ class CreateMenuView(arcade.View):
         self.manager = arcade.gui.UIManager()
         self.background_color = arcade.color.LAVENDER
         self.client_connected = False
-
+        self.required_clients = max(1, mg.get_total_players() - 1)
         width, height = self.size
         wr = height / 1080  # window ratio
 
         # create buttons with relative size
-        lobby_code_button = arcade.gui.UIFlatButton(text=lobby_code, width=250*wr,
-                                             text_color=arcade.color.BLACK)
-        self.create_button = arcade.gui.UIFlatButton(text="Create", width=250*wr)
+        lobby_code_button = arcade.gui.UIFlatButton(
+            text=lobby_code, width=250*wr, text_color=arcade.color.BLACK)
+        self.create_button = arcade.gui.UIFlatButton(
+            text="Create", width=250*wr)
         self.create_button.disabled = True
-        back_button = arcade.gui.UIFlatButton(text="Back", width=250*wr)
-        self.status_label = arcade.gui.UITextArea(text="Waiting for player to connect...",
-                                                  width=400 * wr, text_color=arcade.color.BLACK)
+        back_button = arcade.gui.UIFlatButton(
+            text="Back", width=250*wr)
+        self.status_label = arcade.gui.UITextArea(
+            text="Waiting for players to connect...",
+            width=400 * wr, text_color=arcade.color.BLACK)
         # field showing code for players to connect
-        # TODO
-        # field with connected players
 
         @lobby_code_button.event("on_click")
         def on_click_lobby_code(event):
@@ -347,11 +424,6 @@ class CreateMenuView(arcade.View):
 
         @back_button.event("on_click")
         def on_click_back(event):
-            try:
-                mg.threads[1].terminate()
-            except Exception as e:
-                logger.error(f"[{datetime.now():%H:%M:%S}] Error terminating connection: {e}")
-                logger.error(f"[{datetime.now():%H:%M:%S}] {traceback.format_exc()}")
             if previous_view:
                 self.window.show_view(previous_view)
 
@@ -382,11 +454,21 @@ class CreateMenuView(arcade.View):
         )
 
     def on_update(self, delta_time: float):
-        if not self.client_connected and mg.connection_socket is not None:
-            self.client_connected = True
-            self.create_button.disabled = False
-            self.status_label.text = "Player connected! You can start."
-
+        # Host waits for all clients; enable Create when enough are connected
+        if mg.get_is_server():
+            connected = mg.get_connected_clients_count()
+            needed = max(0, self.required_clients - connected)
+            if needed <= 0 and self.create_button.disabled:
+                self.create_button.disabled = False
+                self.status_label.text = "All players connected you can start."
+            elif needed > 0:
+                self.status_label.text = f"Waiting for players... ({connected}/{self.required_clients})"
+            # Add detailed logging for all incoming packets
+            while not mg.queues['received'].empty():
+                packet = mg.queues['received'].get()
+                logger.info(f"[HOST] on_update: Received packet: {packet}")
+                if isinstance(packet, dict) and 'move' in packet and 'to' in packet and 'from' in packet:
+                    logger.info(f"[HOST] Move/result packet: from={packet['from']}, to={packet['to']}, move={packet['move']}, result={packet.get('result')}, turn={packet.get('turn')}")
     def on_draw(self):
         self.clear()
         self.manager.draw()
@@ -428,10 +510,7 @@ class CreateBoardView(arcade.View):
         def on_click_confirm(event):
             if self.confirm_button.disabled:
                 return
-            # send ready signal
             mg.send_data({'status': 'ready'})
-
-            # Create a map of ships with their coordinates
             ship_map = []
             for ship_info in self.placed_ships:
                 ship_coords = []
@@ -439,9 +518,11 @@ class CreateBoardView(arcade.View):
                     r, c = self._get_sprite_indices(spr)
                     ship_coords.append((r, c))
                 ship_map.append(ship_coords)
-
-            # Pass the board state and ship map to the game view
-            game_view = GameView(self, self.board_state, ship_map)
+            # Detect 2P or 4P mode and show correct game view
+            if mg.get_total_players() == 4:
+                game_view = GameView4P(self, self.board_state, ship_map)
+            else:
+                game_view = GameView(self, self.board_state, ship_map)
             self.window.show_view(game_view)
 
         self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
@@ -672,7 +753,6 @@ class GameView(arcade.View):
         self.manager = arcade.gui.UIManager()
         self.background_color = arcade.color.SEA_BLUE
         self.grid_sprite_list = arcade.SpriteList()
-        self.grid_sprites = []
         self.player_board_state = player_board_state
         self.ship_map = ship_map
         self.my_hits_board = [[False for _ in range(10)] for _ in range(10)]
@@ -696,13 +776,13 @@ class GameView(arcade.View):
         self.turn_label = arcade.gui.UILabel(text=turn_text, font_size=24, font_name="Arial",
                                              text_color=arcade.color.WHITE)
         self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
-        self.anchor.add(child=self.waiting_label, anchor_x="center_x", anchor_y="top", align_y=-50 * self.wr)
+        self.anchor.add(child=self.waiting_label, anchor_x="right", anchor_y="top", align_y=-50 * self.wr)
 
         size = (75 * self.wr, 2 * self.wr)
 
         # create 2 10x10 grids and place them on board
 
-        for i in range (0, 2):
+        for i in range(0, 2):
             self.grid_sprites.append([])
             for row in range(10):
                 self.grid_sprites[i].append([])
@@ -788,7 +868,12 @@ class GameView(arcade.View):
             self.game_started = True
             self.anchor.remove(self.waiting_label)
             self.anchor.add(child=self.turn_label, anchor_x="center_x", anchor_y="top", align_y=-50 * self.wr)
-
+            # Add detailed logging for all incoming packets
+            while not mg.queues['received'].empty():
+                packet = mg.queues['received'].get()
+                logger.info(f"[HOST] on_update: Received packet: {packet}")
+                if isinstance(packet, dict) and 'move' in packet and 'to' in packet and 'from' in packet:
+                    logger.info(f"[HOST] Move/result packet: from={packet['from']}, to={packet['to']}, move={packet['move']}, result={packet.get('result')}, turn={packet.get('turn')}")
         # Check for messages from the other player
         try:
             while not mg.queues['received'].empty():
@@ -886,6 +971,262 @@ class GameView(arcade.View):
         self.manager.disable()
 
 
+class GameView4P(arcade.View):
+    def __init__(self, previous_view: arcade.View, player_board_state=None, ship_map=None):
+        super().__init__()
+        self.manager = arcade.gui.UIManager()
+        self.background_color = arcade.color.SEA_BLUE
+        self.grid_sprite_list = arcade.SpriteList()
+        self.grid_sprites = []
+        self.player_board_state = player_board_state
+        self.ship_map = ship_map
+        self.my_hits_board = [[False for _ in range(10)] for _ in range(10)]
+        self.is_my_turn = False
+        self.waiting_for_shot_result = False
+        self.my_hits = 0
+        self.game_started = False
+        self.remote_players_ready = 0
+        self._log_prefix = f"[{datetime.now():%H:%M:%S}] PID={os.getpid()}"
+
+        logger.info(f"{self._log_prefix} GameView4P __init__ called. is_player={is_player}")
+
+        width, height = self.size
+        self.wr = height / 1080
+
+        # Calculate grid size to fill screen in 2x2 pattern with spacing
+        margin_ratio = 0.06  # 6% margin between boards and edges
+        grid_area_width = width * (1 - margin_ratio * 2.2) / 2  # reduce right margin
+        grid_area_height = height * (1 - margin_ratio * 3) / 2
+        grid_size = min(grid_area_width, grid_area_height)
+        cell_size = grid_size / 10
+        cell_margin = cell_size * 0.05
+
+        # Move right boards closer to the left
+        left_x = margin_ratio * width + grid_size / 2
+        right_x = left_x + grid_size + margin_ratio * width * 0.7  # less gap between boards
+        top_y = height - margin_ratio * height - grid_size / 2
+        bottom_y = margin_ratio * height + grid_size / 2
+        self.label_align_x = right_x + grid_size / 2 + 30
+        grid_positions = [
+            (left_x, top_y),     # Top-left (your board)
+            (right_x, top_y),    # Top-right
+            (left_x, bottom_y),  # Bottom-left
+            (right_x, bottom_y), # Bottom-right
+        ]
+
+        for i in range(4):
+            self.grid_sprites.append([])
+            grid_center_x, grid_center_y = grid_positions[i]
+            top_left_x = grid_center_x - grid_size / 2
+            top_left_y = grid_center_y + grid_size / 2
+            for row in range(10):
+                self.grid_sprites[i].append([])
+                for col in range(10):
+                    x = top_left_x + col * (cell_size + cell_margin) + cell_size / 2
+                    y = top_left_y - row * (cell_size + cell_margin) - cell_size / 2
+                    color = arcade.color.DARK_GRAY
+                    sprite = arcade.SpriteSolidColor(cell_size, cell_size, color=color)
+                    sprite.center_x = x
+                    sprite.center_y = y
+                    self.grid_sprites[i][row].append(sprite)
+                    self.grid_sprite_list.append(sprite)
+        # Set player's board based on the state from CreateBoardView
+        if player_board_state:
+            state_colors = {0: arcade.color.GRAY, 1: arcade.color.TEAL, 2: arcade.color.GRAY}
+            for r in range(10):
+                for c in range(10):
+                    state = player_board_state[r][c]
+                    if state == 1:
+                        self.grid_sprites[0][r][c].color = state_colors[state]
+
+        # Add labels above boards (like in 2P)
+        self.waiting_label = arcade.gui.UILabel(
+            text="Waiting for all players...", font_size=24,
+            font_name="Arial", text_color=arcade.color.WHITE
+        )
+        self.turn_label = arcade.gui.UILabel(
+            text="Your turn", font_size=24, font_name="Arial",
+            text_color=arcade.color.WHITE
+        )
+        self.anchor = self.manager.add(arcade.gui.UIAnchorLayout())
+        # Place labels above the boards, on the right side
+        self.anchor.add(child=self.waiting_label, anchor_x="left", anchor_y="top", align_x=right_x + grid_size / 2 + 30, align_y=-50 * self.wr)
+        # The turn label will be shown after game starts (see on_update)
+
+    def on_draw(self):
+        self.clear()
+        self.manager.draw()
+        self.grid_sprite_list.draw()
+
+    def on_mouse_press(self, x: float, y: float, button: int, modifiers: int):
+        if not self.game_started:
+            return
+
+        if button == arcade.MOUSE_BUTTON_RIGHT:
+            clicked_sprites = arcade.get_sprites_at_point((x, y), self.grid_sprite_list)
+            if clicked_sprites:
+                sprite = clicked_sprites[0]
+                index = self.grid_sprite_list.index(sprite)
+                if index >= 100: # Only mark opponent grids
+                    if sprite.color == arcade.color.DARK_GRAY:
+                        sprite.color = arcade.color.LIGHT_GRAY
+                    elif sprite.color == arcade.color.LIGHT_GRAY:
+                        sprite.color = arcade.color.DARK_GRAY
+            return
+
+        my_pid = mg.get_my_player_id()
+        if not hasattr(self, 'current_turn'):
+            logger.warning("No current_turn set yet!")
+            return
+        is_my_turn = (self.current_turn == my_pid)
+        logger.info(f"on_mouse_press: my_pid={my_pid}, current_turn={self.current_turn}, is_my_turn={is_my_turn}, waiting_for_shot_result={self.waiting_for_shot_result}")
+        if not is_my_turn or self.waiting_for_shot_result:
+            logger.info(f"Blocked shot: is_my_turn={is_my_turn}, waiting_for_shot_result={self.waiting_for_shot_result}")
+            return
+
+        clicked_sprites = arcade.get_sprites_at_point((x, y), self.grid_sprite_list)
+        if clicked_sprites:
+            sprite = clicked_sprites[0]
+            try:
+                index = self.grid_sprite_list.index(sprite)
+                if index < 100 or sprite.color != arcade.color.DARK_GRAY:
+                    return # Clicked own board or already shot cell
+
+                grid_num = index // 100
+                row = (index % 100) // 10
+                col = (index % 100) % 10
+
+                all_pids = list(range(mg.get_total_players()))
+                opponent_pids = [p for p in all_pids if p != my_pid]
+                if (grid_num - 1) < len(opponent_pids):
+                    target_pid = opponent_pids[grid_num - 1]
+                    logger.info(f"Sending move: from={my_pid}, to={target_pid}, move=({row},{col}), turn={self.current_turn}")
+                    mg.send_data({'move': (row, col), 'to': target_pid, 'from': my_pid, 'result': None, 'turn': self.current_turn})
+                    self.waiting_for_shot_result = True
+            except ValueError:
+                pass
+
+    def on_update(self, delta_time: float):
+        try:
+            while not mg.queues['received'].empty():
+                data = mg.queues['received'].get_nowait()
+
+                # Game start/turn messages
+                if 'type' in data:
+                    if data['type'] == 'start':
+                        self.game_started = True
+                        self.anchor.remove(self.waiting_label)
+                        self.anchor.add(child=self.turn_label, anchor_x="right", anchor_y="top", align_y=-50 * self.wr)
+                        self.current_turn = data.get('turn', 0)
+                        logger.info(f"Game started. current_turn={self.current_turn}")
+                        self._update_turn_label()
+                        continue
+                    elif data['type'] == 'turn':
+                        self.current_turn = data.get('turn', 0)
+                        logger.info(f"Turn update. current_turn={self.current_turn}")
+                        self._update_turn_label()
+                        continue
+
+                # Unified move/result packet
+                if 'move' in data and 'to' in data and 'from' in data:
+                    move = data['move']
+                    shooter_pid = data['from']
+                    target_pid = data['to']
+                    result = data.get('result')
+                    row, col = move
+                    my_pid = mg.get_my_player_id()
+                    all_pids = list(range(mg.get_total_players()))
+                    opponent_pids = [p for p in all_pids if p != my_pid]
+                    self.current_turn = data.get('turn', getattr(self, 'current_turn', 0))
+                    logger.info(f"Received move/result: from={shooter_pid}, to={target_pid}, move=({row},{col}), result={result}, turn={self.current_turn}")
+                    self._update_turn_label()
+
+                    # If result is None, this is a shot at us
+                    if result is None and target_pid == my_pid:
+                        is_hit = self.player_board_state[row][col] == 1
+                        shot_result = 'hit' if is_hit else 'miss'
+                        sunk_ship_coords = None
+                        if is_hit:
+                            self.my_hits_board[row][col] = True
+                            for ship in self.ship_map:
+                                if (row, col) in ship:
+                                    if all(self.my_hits_board[r][c] for r, c in ship):
+                                        shot_result = 'sunk'
+                                        sunk_ship_coords = ship
+                                    break
+                        logger.info(f"Responding to shot: from={shooter_pid}, to={my_pid}, move=({row},{col}), result={shot_result}, turn={self.current_turn}")
+                        mg.send_data({'move': (row, col), 'to': shooter_pid, 'from': my_pid, 'result': shot_result, 'sunk': sunk_ship_coords, 'turn': self.current_turn})
+                        # Update our own board visually
+                        if shot_result == 'sunk' and sunk_ship_coords:
+                            for r, c in sunk_ship_coords:
+                                self.grid_sprites[0][r][c].color = arcade.color.DARK_RED
+                        else:
+                            color = arcade.color.RED if is_hit else arcade.color.WHITE
+                            self.grid_sprites[0][row][col].color = color
+                        continue
+
+                    # If result is not None, this is a result for a shot
+                    if result is not None:
+                        # Update the correct grid visually: always update the board of the target (the player who was shot at)
+                        grid_to_update = -1
+                        # For your own board, always grid 0; for opponents, map pid to grid index
+                        if target_pid == my_pid:
+                            grid_to_update = 0
+                        else:
+                            # Find which opponent grid this is
+                            try:
+                                grid_to_update = 1 + opponent_pids.index(target_pid)
+                            except ValueError:
+                                grid_to_update = -1
+
+                        if grid_to_update != -1:
+                            if result == 'sunk' and 'sunk' in data and data['sunk']:
+                                for r, c in data['sunk']:
+                                    self.grid_sprites[grid_to_update][r][c].color = arcade.color.DARK_RED
+                            else:
+                                color = arcade.color.RED if result == 'hit' else arcade.color.WHITE
+                                self.grid_sprites[grid_to_update][row][col].color = color
+
+                        # Always clear waiting_for_shot_result for the shooter after any result
+                        if shooter_pid == my_pid:
+                            self.waiting_for_shot_result = False
+                            if result in ('hit', 'sunk'):
+                                self.my_hits += 1
+                                if self.my_hits == 20:
+                                    mg.send_data({'type': 'game_over', 'from': my_pid})
+                                    self.window.show_view(GameOverView(self, "You Won!"))
+                                    return
+                        continue
+
+                # Game over
+                if 'type' in data and data['type'] == 'game_over':
+                    if data.get('from') != mg.get_my_player_id():
+                        self.window.show_view(GameOverView(self, "You Lost!"))
+                        return
+        except Exception as e:
+            logger.error(f"Error in on_update: {e}", exc_info=True)
+
+    def _update_turn_label(self):
+        my_pid = mg.get_my_player_id()
+        is_my_turn = (self.current_turn == my_pid)
+        logger.info(f"_update_turn_label: my_pid={my_pid}, current_turn={self.current_turn}, is_my_turn={is_my_turn}")
+        if is_my_turn:
+            self.turn_label.text = "Your turn"
+        else:
+            self.turn_label.text = f"Player {self.current_turn}'s turn"
+
+    def on_key_press(self, key: int, modifiers: int):
+        if key == arcade.key.ESCAPE:
+            pause_view = PauseGameView(self)
+            self.window.show_view(pause_view)
+
+    def on_show(self):
+        self.manager.enable()
+
+    def on_hide(self):
+        self.manager.disable()
+
+
 class GameOverView(arcade.View):
     def __init__(self, previous_view: arcade.View, message: str):
         super().__init__()
@@ -929,79 +1270,6 @@ class GameOverView(arcade.View):
     def on_show_view(self):
         arcade.set_background_color(arcade.color.BLACK_BEAN)
         self.manager.enable()
-
-
-''' # old code, 4P version, moving to 2P
-# Menu when player is in the game
-class GameView(arcade.View):
-    def __init__(self, previous_view: arcade.View):
-        super().__init__()
-        self.manager = arcade.gui.UIManager()
-        self.background_color = arcade.color.AMAZON
-        self.grid_sprite_list = arcade.SpriteList()
-        self.grid_sprites = []
-
-        # get ratio correct
-        width, height = self.size
-        wr = height / 1080  # window ratio
-        margin_grid = 75 * wr
-        size_big = (51 * wr, 2 * wr)
-        size_sml = (30.9 * wr, 2 * wr)
-
-        # create 5 10x10 grids and place them on board
-        for num in range(1, 6):
-            self.grid_sprites.append([])
-            for row in range(10):
-                self.grid_sprites[num - 1].append([])
-                for col in range(10):
-                    # create 3 smaller, other players' grids:
-                    if num in [1, 2, 3]:
-                        w, m = size_sml
-                        x = (margin_grid * num + col * (w + m) + (w / 2))
-                        x += (num - 1) * (10 * w + 9 * m)
-                        y = height - (margin_grid + row * (w + m) + (w / 2))
-                        # noinspection PyTypeChecker
-                        sprite = arcade.SpriteSolidColor(w, w, color=arcade.color.RED)
-                        sprite.center_x = x
-                        sprite.center_y = y
-                        self.grid_sprites[num - 1][row].append(sprite)
-                        self.grid_sprite_list.append(sprite)
-
-                    # create 2 bigger grids for player and common one:
-                    elif num in [4, 5]:
-                        w, m = size_big
-                        x = (margin_grid * (num - 3) + col * (w + m) + (w / 2))
-                        x += (num - 4) * (10 * w + 9 * m)
-                        y = (margin_grid + row * (w + m) + (w / 2))
-                        # noinspection PyTypeChecker
-                        sprite = arcade.SpriteSolidColor(w, w, color=arcade.color.RED)
-                        sprite.center_x = x
-                        sprite.center_y = y
-                        self.grid_sprites[num - 1][row].append(sprite)
-                        self.grid_sprite_list.append(sprite)
-                    else:
-                        logger.error(f"[{datetime.now():%H:%M:%S}]tried to create grid {num=}")
-
-        # Create a list of solid-color sprites to represent each grid location
-
-    def on_draw(self):
-        self.clear()
-        self.manager.draw()
-        self.grid_sprite_list.draw()
-
-    def on_mouse_press(self, x: float, y: float, button: int, modifiers: int):
-        print(f"{x=}, {y=}, {button=}, {modifiers=}")
-
-    def on_key_press(self, key: int, modifiers: int):
-        if key == arcade.key.ESCAPE:
-            pause_view = PauseGameView(self)
-            self.window.show_view(pause_view)
-
-    def on_show(self):
-        self.manager.enable()
-
-    def on_hide(self):
-        self.manager.disable()'''
 
 
 # pause menu
