@@ -1079,9 +1079,9 @@ class GameView4P(arcade.View):
             logger.warning("No current_turn set yet!")
             return
         is_my_turn = (self.current_turn == my_pid)
-        logger.info(f"on_mouse_press: my_pid={my_pid}, current_turn={self.current_turn}, is_my_turn={is_my_turn}, waiting_for_shot_result={self.waiting_for_shot_result}")
+        logger.info(f"on_mouse_press: {my_pid=}, {self.current_turn=}, is_my_turn={is_my_turn},{self.waiting_for_shot_result=}")
         if not is_my_turn or self.waiting_for_shot_result:
-            logger.info(f"Blocked shot: is_my_turn={is_my_turn}, waiting_for_shot_result={self.waiting_for_shot_result}")
+            logger.info(f"Blocked shot: {is_my_turn=}, {self.waiting_for_shot_result=}")
             return
 
         clicked_sprites = arcade.get_sprites_at_point((x, y), self.grid_sprite_list)
@@ -1100,7 +1100,7 @@ class GameView4P(arcade.View):
                 opponent_pids = [p for p in all_pids if p != my_pid]
                 if (grid_num - 1) < len(opponent_pids):
                     target_pid = opponent_pids[grid_num - 1]
-                    logger.info(f"Sending move: from={my_pid}, to={target_pid}, move=({row},{col}), turn={self.current_turn}")
+                    logger.info(f"Sending move: from={my_pid=}, to={target_pid=}, move=({row},{col}), turn={self.current_turn}")
                     mg.send_data({'move': (row, col), 'to': target_pid, 'from': my_pid, 'result': None, 'turn': self.current_turn})
                     self.waiting_for_shot_result = True
             except ValueError:
@@ -1123,7 +1123,7 @@ class GameView4P(arcade.View):
                         continue
                     elif data['type'] == 'turn':
                         self.current_turn = data.get('turn', 0)
-                        logger.info(f"Turn update. current_turn={self.current_turn}")
+                        logger.info(f"Turn update. {self.current_turn=}")
                         self._update_turn_label()
                         continue
 
@@ -1155,7 +1155,7 @@ class GameView4P(arcade.View):
                                         sunk_ship_coords = ship
                                     break
                         logger.info(f"Responding to shot: from={shooter_pid}, to={my_pid}, move=({row},{col}), result={shot_result}, turn={self.current_turn}")
-                        mg.send_data({'move': (row, col), 'to': shooter_pid, 'from': my_pid, 'result': shot_result, 'sunk': sunk_ship_coords, 'turn': self.current_turn})
+                        mg.send_data({'move': (row, col), 'to': my_pid, 'from': shooter_pid, 'result': shot_result, 'sunk': sunk_ship_coords, 'turn': self.current_turn})
                         # Update our own board visually
                         if shot_result == 'sunk' and sunk_ship_coords:
                             for r, c in sunk_ship_coords:
@@ -1189,7 +1189,6 @@ class GameView4P(arcade.View):
 
                         # Always clear waiting_for_shot_result for the shooter after any result
                         if shooter_pid == my_pid:
-                            self.waiting_for_shot_result = False
                             if result in ('hit', 'sunk'):
                                 self.my_hits += 1
                                 if self.my_hits == 20:
@@ -1210,6 +1209,7 @@ class GameView4P(arcade.View):
         my_pid = mg.get_my_player_id()
         is_my_turn = (self.current_turn == my_pid)
         logger.info(f"_update_turn_label: my_pid={my_pid}, current_turn={self.current_turn}, is_my_turn={is_my_turn}")
+        self.waiting_for_shot_result = False
         if is_my_turn:
             self.turn_label.text = "Your turn"
         else:

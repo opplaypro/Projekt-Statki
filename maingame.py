@@ -5,9 +5,7 @@ import base64
 import threading
 import time
 import queue
-import logging
-
-logger = logging.getLogger(__name__)
+from gui_windows import logger
 
 queues = {'received': queue.Queue()}
 
@@ -142,7 +140,7 @@ def _server_client_reader(pid: int, con: socket.socket):
                         # If this is a result and it's a miss, advance turn
                         if obj.get('result') == 'miss':
                             _server_advance_turn()
-                        return
+                        continue
 
                 # Default behavior: deliver to host queue and broadcast
                 queues['received'].put(obj)
@@ -156,6 +154,7 @@ def _server_client_reader(pid: int, con: socket.socket):
     # Cleanup
     try:
         del _server_clients[pid]
+        logger.error(f"Client {pid} disconnected and removed.")
     except KeyError:
         pass
     queues['received'].put({'type': 'client_left', 'player_id': pid, 'connected': len(_server_clients)})
@@ -172,8 +171,8 @@ def _server_broadcast(obj: dict, exclude_pid: int | None = None, include_host: b
             continue
         try:
             con.sendall(pickle.dumps(obj))
-        except Exception:
-            logger.error(f"Failed to send to client {pid}")
+        except Exception as e:
+            logger.error(f"Failed to send to client {pid}, {e=}")
     # Optionally also deliver to host (local queue)
     if include_host:
         queues['received'].put(obj)
@@ -187,8 +186,8 @@ def _server_send_to(pid: int, obj: dict):
     if con:
         try:
             con.sendall(pickle.dumps(obj))
-        except Exception:
-            logger.error(f"Failed to send direct message to client {pid}")
+        except Exception as e:
+            logger.error(f"Failed to send direct message to client {pid}, {e=}")
 
 
 def _server_on_ready(pid: int):
