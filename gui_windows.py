@@ -748,11 +748,12 @@ class CreateBoardView(arcade.View):
 
 # Menu when player is in the game
 class GameView(arcade.View):
-    def __init__(self, previous_view: arcade.View, player_board_state: list[list[int]] = None, ship_map: list = None):
+    def __init__(self, previous_view: arcade.View, player_board_state = None, ship_map = None):
         super().__init__()
         self.manager = arcade.gui.UIManager()
         self.background_color = arcade.color.SEA_BLUE
         self.grid_sprite_list = arcade.SpriteList()
+        self.grid_sprites = []
         self.player_board_state = player_board_state
         self.ship_map = ship_map
         self.my_hits_board = [[False for _ in range(10)] for _ in range(10)]
