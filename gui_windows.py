@@ -4,18 +4,17 @@ import logging
 import sys
 import os
 from datetime import datetime
-import random
 import maingame as mg
 import pyperclip as pc
-import arcade.gl.backends.opengl.provider
-import arcade.gl.backends.opengl
-import arcade.gl.backends
 
 is_player = -1
 # global variable to check if player or server:
 # -1 undefined, 0 server, 1 player
 
-logfile = f"logs/latest_{random.randint(10000,99999)}.log"
+# create logging
+if not os.path.exists("logs"):
+    os.makedirs("logs")
+logfile = f"logs/log_{datetime.now():%y%m%d%H%M%S}.log"
 logging.basicConfig(filename=logfile, level=0, filemode='w',
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -761,17 +760,20 @@ class GameView(arcade.View):
         self.remote_player_ready = False
         self.waiting_for_shot_result = False
         self.my_hits = 0
+        global is_player
 
         # get ratio correct
         width, height = self.size
         self.wr = height / 1080  # window ratio
+
+        self._log_prefix = f"[{datetime.now():%H:%M:%S}] PID={os.getpid()}"
+        logger.info(f"{self._log_prefix} GameView __init__ called. is_player={is_player}")
 
         # Waiting label
         self.waiting_label = arcade.gui.UILabel(text="Waiting for second player...", font_size=24,
                                                 font_name="Arial", text_color=arcade.color.WHITE)
 
         # Turn indicator
-        global is_player
         self.is_my_turn = (is_player == 0)  # Host starts
         turn_text = "Your turn" if self.is_my_turn else "Opponent's turn"
         self.turn_label = arcade.gui.UILabel(text=turn_text, font_size=24, font_name="Arial",
@@ -782,7 +784,6 @@ class GameView(arcade.View):
         size = (75 * self.wr, 2 * self.wr)
 
         # create 2 10x10 grids and place them on board
-
         for i in range(0, 2):
             self.grid_sprites.append([])
             for row in range(10):
@@ -792,9 +793,7 @@ class GameView(arcade.View):
                     x = (156 * self.wr + 72 * self.wr * i + col * (w + m) + (w / 2))
                     x += i * (10 * w + 9 * m)
                     y = height - (156 * self.wr + row * (w + m) + (w / 2))
-                    # noinspection PyTypeChecker
                     color = arcade.color.DARK_GRAY
-                    # noinspection PyTypeChecker
                     sprite = arcade.SpriteSolidColor(w, w, color=color)
                     sprite.center_x = x
                     sprite.center_y = y
@@ -816,8 +815,10 @@ class GameView(arcade.View):
         self.grid_sprite_list.draw()
 
     def on_mouse_press(self, x: float, y: float, button: int, modifiers: int):
+        logger.info(f"on_mouse_press: is_my_turn={self.is_my_turn}, game_started={self.game_started}, waiting_for_shot_result={self.waiting_for_shot_result}")
         if button == arcade.MOUSE_BUTTON_RIGHT:
             if not self.game_started:
+                logger.info("Blocked right-click: game not started")
                 return
             clicked_sprites = arcade.get_sprites_at_point((x, y), self.grid_sprite_list)
             if clicked_sprites:
@@ -834,6 +835,7 @@ class GameView(arcade.View):
             return
 
         if not self.is_my_turn or not self.game_started or self.waiting_for_shot_result:
+            logger.info(f"Blocked shot: is_my_turn={self.is_my_turn}, game_started={self.game_started}, waiting_for_shot_result={self.waiting_for_shot_result}")
             return
 
         clicked_sprites = arcade.get_sprites_at_point((x, y), self.grid_sprite_list)
@@ -845,23 +847,27 @@ class GameView(arcade.View):
 
                 # Clicks on player's own grid (left one) are ignored for shooting
                 if index < 100:
+                    logger.info("Ignored click: player's own grid")
                     return
 
                 # Prevent shooting at the same spot twice or on marked cells
                 if self.grid_sprite_list[index].color != arcade.color.DARK_GRAY:
+                    logger.info("Ignored click: already shot or marked cell")
                     return
 
                 # It's a click on the opponent's grid (right one)
                 row = (index - 100) // 10
                 col = (index - 100) % 10
 
+                logger.info(f"Sending move: row={row}, col={col}")
                 # Send move to opponent
                 mg.send_data({'move': (row, col)})
 
                 self.waiting_for_shot_result = True
+                logger.info("Set waiting_for_shot_result=True")
 
             except ValueError:
-                pass
+                logger.exception("ValueError in on_mouse_press")
 
     def on_update(self, delta_time: float):
         # Check if game can start
@@ -869,12 +875,7 @@ class GameView(arcade.View):
             self.game_started = True
             self.anchor.remove(self.waiting_label)
             self.anchor.add(child=self.turn_label, anchor_x="center_x", anchor_y="top", align_y=-50 * self.wr)
-            # Add detailed logging for all incoming packets
-            while not mg.queues['received'].empty():
-                packet = mg.queues['received'].get()
-                logger.info(f"[HOST] on_update: Received packet: {packet}")
-                if isinstance(packet, dict) and 'move' in packet and 'to' in packet and 'from' in packet:
-                    logger.info(f"[HOST] Move/result packet: from={packet['from']}, to={packet['to']}, move={packet['move']}, result={packet.get('result')}, turn={packet.get('turn')}")
+            logger.info("Game started: removed waiting_label and added turn_label")
         # Check for messages from the other player
         try:
             while not mg.queues['received'].empty():
@@ -882,17 +883,16 @@ class GameView(arcade.View):
 
                 if not self.game_started and 'status' in data and data['status'] == 'ready':
                     self.remote_player_ready = True
+                    logger.info("Remote player ready")
 
                 elif self.game_started and 'move' in data:
                     row, col = data['move']
-                    # This move is on our board (the left one)
                     is_hit = self.player_board_state[row][col] == 1
                     result = 'hit' if is_hit else 'miss'
                     sunk_ship_coords = None
 
                     if is_hit:
                         self.my_hits_board[row][col] = True
-                        # Check if a ship is sunk
                         for ship in self.ship_map:
                             if (row, col) in ship:
                                 is_sunk = all(self.my_hits_board[r][c] for r, c in ship)
@@ -901,10 +901,9 @@ class GameView(arcade.View):
                                     sunk_ship_coords = ship
                                 break
 
-                    # Send result back to the opponent
+                    logger.info(f"Responding to shot: move=({row},{col}), result={result}")
                     mg.send_data({'shot_result': result, 'coords': sunk_ship_coords if sunk_ship_coords else (row, col)})
 
-                    # Update our own board visually
                     if result == 'sunk':
                         for r, c in sunk_ship_coords:
                             self.grid_sprites[0][r][c].color = arcade.color.DARK_RED
@@ -915,13 +914,15 @@ class GameView(arcade.View):
                     if result == 'miss':
                         self.is_my_turn = True
                         self.turn_label.text = "Your turn"
-                    else:  # hit
+                    else:
                         self.is_my_turn = False
                         self.turn_label.text = "Opponent's turn"
                     self.turn_label.fit_content()
+                    logger.info(f"Turn update. is_my_turn={self.is_my_turn}")
 
                 elif self.game_started and 'shot_result' in data:
                     self.waiting_for_shot_result = False
+                    logger.info("Received shot_result, set waiting_for_shot_result=False")
                     result = data['shot_result']
                     coords = data['coords']
 
@@ -932,29 +933,32 @@ class GameView(arcade.View):
                     else:
                         row, col = coords
                         color = arcade.color.RED if result == 'hit' else arcade.color.WHITE
-                        # Update the opponent's grid (the right one)
                         index = 100 + row * 10 + col
                         self.grid_sprite_list[index].color = color
 
                     if result == 'hit' or result == 'sunk':
                         self.my_hits += 1
+                        logger.info(f"my_hits incremented: {self.my_hits}")
                         if self.my_hits == 20:
                             mg.send_data({'game_over': 'I won'})
                             game_over_view = GameOverView(self, "You won!")
                             self.window.show_view(game_over_view)
+                            logger.info("You won! Showing GameOverView.")
                             return
 
                     if result == 'miss':
                         self.is_my_turn = False
                         self.turn_label.text = "Opponent's turn"
-                    else:  # hit or sunk
+                    else:
                         self.is_my_turn = True
                         self.turn_label.text = "Your turn"
                     self.turn_label.fit_content()
+                    logger.info(f"Turn update after shot_result. is_my_turn={self.is_my_turn}")
 
                 elif self.game_started and 'game_over' in data:
                     game_over_view = GameOverView(self, "You lost!")
                     self.window.show_view(game_over_view)
+                    logger.info("You lost! Showing GameOverView.")
                     return
 
         except Exception as e:

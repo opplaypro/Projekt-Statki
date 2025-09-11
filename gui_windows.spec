@@ -14,6 +14,9 @@ a = Analysis(
     datas=[(str(arcade_resources_path), 'arcade/resources')],
     hiddenimports=[
         "arcade.gl",
+        "arcade.gl.backends"
+        "arcade.gl.backends.opengl",
+        "arcade.gl.backends.opengl.provider",
         "pyperclip"
     ],
     hookspath=[],
